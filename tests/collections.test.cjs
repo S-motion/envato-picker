@@ -5,7 +5,9 @@ const vm = require('node:vm');
 const source = fs.readFileSync('Envato-Elements-Footage-Picker.user.js', 'utf8');
 function helpers() {
   const code = source.split('// COLLECTION_HELPERS_START')[1]?.split('// COLLECTION_HELPERS_END')[0] || '';
-  const ctx = vm.createContext({ URL });
+  const ctx = vm.createContext({ URL, navigator: {language:'ru'} });
+  const translations = source.split('// Keep interface translations together; footage titles remain unchanged.')[1].split('const WEB_JOB_PREFIX')[0];
+  vm.runInContext(translations, ctx);
   vm.runInContext(code, ctx);
   return ctx;
 }

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(require('node:path').join(__dirname, '..', 'Envato-Elements-Footage-Picker.user.js'), 'utf8');
-const core = source.slice(source.indexOf('    const UI ='), source.indexOf("    if (location.hostname === 'filesta.com')"));
+const core = source.slice(source.indexOf('    const TRANSLATIONS ='), source.indexOf("    if (location.hostname === 'filesta.com')"));
 const id = '12345678-1234-1234-1234-123456789abc';
 const key = 'envato_picker_filesta_web_' + id;
 const url = 'https://elements.envato.com/example-ABC1234';
@@ -37,7 +37,7 @@ function harness(options = {}) {
             return [];
         },
     };
-    const context = { URL, URLSearchParams, console, document, HTMLInputElement: Input, Event: class {}, window: page,
+    const context = { URL, URLSearchParams, console, document, navigator: {language:'ru'}, HTMLInputElement: Input, Event: class {}, window: page,
         Date: class extends Date { static now() { return time; } },
         setInterval: () => 1, clearInterval() {},
         setTimeout(callback, ms) { time += ms; return setImmediate(callback); },

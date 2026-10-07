@@ -2,8 +2,9 @@
 // @name         Envato Elements Footage Picker
 // @name:ru      Envato Elements — подборка футажей
 // @namespace    https://elements.envato.com/
-// @description  Отмечайте футажи на Envato Elements и копируйте список ссылок
-// @version      1.0.75
+// @description  Collect Envato Elements footage, organize folders and download through Filesta
+// @description:ru Отмечайте футажи на Envato Elements, создавайте папки и скачивайте через Filesta
+// @version      1.0.76
 // @homepageURL  https://github.com/S-motion/envato-picker
 // @updateURL    https://raw.githubusercontent.com/S-motion/envato-picker/main/Envato-Elements-Footage-Picker.user.js
 // @downloadURL  https://raw.githubusercontent.com/S-motion/envato-picker/main/Envato-Elements-Footage-Picker.user.js
@@ -27,7 +28,7 @@
     'use strict';
 
     // Keep interface translations together; footage titles remain unchanged.
-    const UI = Object.freeze({
+    const TRANSLATIONS = Object.freeze({ ru: Object.freeze({
         picked: 'Подборка футажей',
         empty: 'Пока ничего не выбрано',
         noPreview: 'Нет превью',
@@ -81,7 +82,44 @@
         more: 'Дополнительные действия', shortTitle: 'Подборка', searchShort: 'Найти футаж…',
         hideDownloads: 'Скрыть очередь загрузок',
         fullscreen: 'Развернуть на весь экран', exitFullscreen: 'Вернуться к компактному окну',
-    });
+        exportHelp: 'Нажмите на карточку, чтобы открыть оригинал. Миниатюры загружаются из интернета.',
+    }), en: Object.freeze({
+        picked: 'Footage collection', empty: 'Nothing selected yet', noPreview: 'No preview',
+        showList: 'Show list', showThumbnails: 'Show thumbnails', copy: 'Copy links', copied: 'Links copied',
+        clear: 'Clear collection', confirmClear: 'Remove all footage from the collection?',
+        openFilesta: 'Open Filesta', downloadFilesta: 'Download via Filesta',
+        add: 'Add to collection', remove: 'Remove from collection', toggle: 'Open or close collection',
+        download: 'Download via Filesta', downloadAll: 'Download collection', queue: 'Filesta downloads',
+        queued: 'Queued', preparing: 'Preparing in Filesta', downloading: 'Downloading', done: 'Downloaded',
+        failed: 'Error', cancelled: 'Cancelled', review: 'Check the result in Filesta',
+        stop: 'Stop after current file', resume: 'Resume remaining files', workerLink: 'Open background tab',
+        queueHelp: 'Filesta processes files in a background tab. Open it if sign-in or verification is required. Keep the tab open until processing finishes.',
+        needsManager: 'Update the script in Tampermonkey to enable background downloads.',
+        busy: 'Wait for the current queue or stop it.', cancelRemaining: 'Cancel remaining files',
+        noWorker: 'The background tab is not responding. Open it and check your Filesta sign-in.',
+        workerForm: 'No available Filesta form found. Check your sign-in, interface language (Russian or English) and service messages.',
+        workerTimeout: 'Filesta did not provide a link. Check the result in the background tab before trying again.',
+        downloadError: 'Download did not finish. Check download permissions and allowed file extensions in Tampermonkey.',
+        storageError: 'Could not save download progress.', emptyQueue: 'No files queued yet', blocked: 'Needs attention',
+        allFolders: 'All footage', noFolder: 'No folder', folder: 'Folder',
+        newFolder: 'Create folder from selection', folderName: 'Folder name', create: 'Create', cancel: 'Cancel', move: 'Move to…',
+        select: 'Select for group actions', selectAll: 'Select all shown', selected: 'Selected', search: 'Search by title or link',
+        sort: 'Footage order', added: 'Date added', az: 'Title A–Z', za: 'Title Z–A',
+        exportHTML: 'Export HTML', exportJSON: 'JSON backup', importJSON: 'Import JSON',
+        importError: 'Could not read the backup. Use an Envato Picker version 1 JSON file up to 10 MB.',
+        imported: 'Collection imported', undo: 'Undo change', changed: 'Collection changed',
+        removeSelected: 'Remove selected', downloadSelected: 'Download selected', downloadVisible: 'Download shown',
+        nothingFound: 'Nothing found', saveError: 'Could not save the collection. Try the change again.',
+        previewHint: 'Hover to preview video', more: 'More actions', shortTitle: 'Collection', searchShort: 'Find footage…',
+        hideDownloads: 'Hide download queue', fullscreen: 'Expand to full screen', exitFullscreen: 'Return to compact window',
+        exportHelp: 'Click a card to open the original. Thumbnails load from the internet.',
+    }) });
+    function browserLocale(preferences = [], fallback = '') {
+        const primary = preferences.find(tag => typeof tag === 'string' && tag.trim()) || fallback;
+        return /^ru(?:-|$)/i.test(String(primary).trim()) ? 'ru' : 'en';
+    }
+    const UI_LANG = browserLocale(navigator.languages || [], navigator.language);
+    const UI = TRANSLATIONS[UI_LANG];
 
     const WEB_JOB_PREFIX = 'envato_picker_filesta_web_';
     const WEB_WORKER_URL = 'https://filesta.com/services/envato/content';
@@ -153,9 +191,9 @@
     function collectionHTML(name, entries, images) {
         const cards = entries.filter(([url]) => collectionUrl(url)).map(([url, title]) => {
             const img = safeWebUrl(images[url]);
-            return `<article><a href="${escapeHTML(collectionUrl(url))}" target="_blank" rel="noopener noreferrer">${img ? `<img loading="lazy" src="${escapeHTML(img)}" alt="">` : '<div class="placeholder">Нет превью</div>'}<h2>${escapeHTML(title)}</h2></a></article>`;
+            return `<article><a href="${escapeHTML(collectionUrl(url))}" target="_blank" rel="noopener noreferrer">${img ? `<img loading="lazy" src="${escapeHTML(img)}" alt="">` : `<div class="placeholder">${escapeHTML(UI.noPreview)}</div>`}<h2>${escapeHTML(title)}</h2></a></article>`;
         }).join('\n');
-        return `<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHTML(name)}</title><style>body{margin:0;padding:32px;background:#12121f;color:#eee;font:16px system-ui}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:20px}article{border-radius:12px;background:#222235;overflow:hidden}a{color:inherit;text-decoration:none}img,.placeholder{width:100%;aspect-ratio:16/9;object-fit:cover;display:block}.placeholder{display:grid;place-items:center;color:#aaa}h2{font-size:16px;padding:0 16px;overflow-wrap:anywhere}p{color:#aaa}</style><h1>${escapeHTML(name)}</h1><p>Envato Elements · ${entries.filter(([url]) => collectionUrl(url)).length} · Нажмите на карточку, чтобы открыть оригинал. Миниатюры загружаются из интернета.</p><main>${cards}</main></html>`;
+        return `<!doctype html><html lang="${UI_LANG}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHTML(name)}</title><style>body{margin:0;padding:32px;background:#12121f;color:#eee;font:16px system-ui}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:20px}article{border-radius:12px;background:#222235;overflow:hidden}a{color:inherit;text-decoration:none}img,.placeholder{width:100%;aspect-ratio:16/9;object-fit:cover;display:block}.placeholder{display:grid;place-items:center;color:#aaa}h2{font-size:16px;padding:0 16px;overflow-wrap:anywhere}p{color:#aaa}</style><h1>${escapeHTML(name)}</h1><p>Envato Elements · ${entries.filter(([url]) => collectionUrl(url)).length} · ${escapeHTML(UI.exportHelp)}</p><main>${cards}</main></html>`;
     }
     function parseBackup(text) {
         const raw = JSON.parse(text);
@@ -370,7 +408,7 @@
     function visibleEntries() {
         const entries = Object.entries(picked).filter(([url, title]) =>
             activeFolder === 'all' || (activeFolder === 'none' ? !folderState.assignments[url] : folderState.assignments[url] === activeFolder));
-        if (sortOrder !== 'added') entries.sort((a,b) => a[1].localeCompare(b[1], 'ru', { numeric:true }) * (sortOrder === 'za' ? -1 : 1));
+        if (sortOrder !== 'added') entries.sort((a,b) => a[1].localeCompare(b[1], UI_LANG, { numeric:true }) * (sortOrder === 'za' ? -1 : 1));
         return entries;
     }
     function actionEntries() {
@@ -862,7 +900,7 @@
         if (document.getElementById('efp-panel')) return;
         const panel = document.createElement('div');
         panel.id = 'efp-panel';
-        panel.lang = 'ru';
+        panel.lang = UI_LANG;
         panel.setAttribute('translate', 'no');
         const drawer = document.createElement('div');
         drawer.id = 'efp-drawer';
@@ -1141,12 +1179,15 @@
         updatePickButton(button, Object.hasOwn(picked, url));
     }
 
+    const DETAIL_ACTION_SELECTOR = '[data-testid="button-add-to-collection"], [data-testid="button-add-to-workspace"], [data-testid="button-download-preview"]';
     function injectDetailPageButtons() {
         const detailPage = document.querySelector(DETAIL_SELECTOR);
         const oldActions = document.getElementById('efp-detail-actions');
         if (!detailPage) { oldActions?.remove(); return; }
         const titleEl = detailPage.querySelector('h1');
-        const anchor = detailPage.querySelector('[data-testid="button-add-to-collection"]');
+        // Signed-in accounts use Workspace; guests use Collection. Preview is a stable fallback.
+        const anchor = detailPage.querySelector('[data-testid="button-add-to-collection"], [data-testid="button-add-to-workspace"]') ||
+            detailPage.querySelector('[data-testid="button-download-preview"]');
         if (!titleEl || !anchor?.parentElement) { oldActions?.remove(); return; }
         const url = canonicalUrl(location.href);
         if (!url) return;
@@ -1157,7 +1198,7 @@
             actions?.remove();
             actions = document.createElement('div');
             actions.id = 'efp-detail-actions';
-            actions.lang = 'ru';
+            actions.lang = UI_LANG;
             actions.setAttribute('translate', 'no');
             const pick = document.createElement('button');
             pick.type = 'button';
@@ -1210,7 +1251,7 @@
                 node.nodeType === Node.ELEMENT_NODE &&
                 (node.matches?.(CARD_SELECTOR + ',' + DETAIL_SELECTOR) ||
                  node.querySelector?.(CARD_SELECTOR + ',' + DETAIL_SELECTOR) ||
-                 node.matches?.('main,[data-testid="button-add-to-collection"],h1'))
+                 node.matches?.('main,h1,' + DETAIL_ACTION_SELECTOR) || node.querySelector?.(DETAIL_ACTION_SELECTOR))
             );
         })) scheduleScan();
     });
@@ -1223,5 +1264,5 @@
     if (window.onurlchange === null) window.addEventListener('urlchange', scheduleScan);
     setInterval(() => { void pollWebDownloads(); }, 2000);
     document.addEventListener('visibilitychange',()=>{if(document.hidden)document.querySelectorAll('#efp-list .efp-list-item').forEach(row=>row.dispatchEvent(new Event('mouseleave')));});
-    console.log('[EFP] Envato Footage Picker 1.0.75 loaded');
+    console.log('[EFP] Envato Footage Picker 1.0.76 loaded · ' + UI_LANG);
 })();
