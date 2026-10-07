@@ -4,7 +4,7 @@
 // @namespace    https://elements.envato.com/
 // @description  Collect Envato Elements footage, organize folders and download through Filesta
 // @description:ru Отмечайте футажи на Envato Elements, создавайте папки и скачивайте через Filesta
-// @version      1.0.76
+// @version      1.0.77
 // @homepageURL  https://github.com/S-motion/envato-picker
 // @updateURL    https://raw.githubusercontent.com/S-motion/envato-picker/main/Envato-Elements-Footage-Picker.user.js
 // @downloadURL  https://raw.githubusercontent.com/S-motion/envato-picker/main/Envato-Elements-Footage-Picker.user.js
@@ -576,14 +576,14 @@
         #efp-empty-msg { color:#777; text-align:center; padding:20px 0 16px; font-size:12px; }
         [data-testid="page-item-detail"] [data-testid="subscribe-cta-button"] { display:none !important; }
         #efp-detail-actions { display:block; width:100%; margin:8px 0; }
-        #efp-detail-btn { display:flex; align-items:center; justify-content:center; gap:8px; box-sizing:border-box; width:100%; padding:10px 16px; border-radius:8px; cursor:pointer; font-size:16px; font-weight:600; text-decoration:none; line-height:24px; }
+        #efp-detail-actions > button { display:flex; align-items:center; justify-content:center; gap:8px; box-sizing:border-box; width:100%; min-height:48px; padding:10px 16px; border:1.5px solid transparent; border-radius:8px; cursor:pointer; font-family:inherit; font-size:16px; font-weight:600; font-style:normal; letter-spacing:normal; text-decoration:none; line-height:24px; }
+        #efp-detail-actions > button > span { text-box:trim-both cap alphabetic; }
         #efp-detail-btn { background:#87e64b; color:#191919; border:1.5px solid #87e64b; }
         #efp-detail-btn:hover { background:#79d43e; }
         #efp-detail-btn.efp-active { background:#441a88; border-color:#441a88; color:#fff; }
-        #efp-detail-btn svg { width:16px; height:16px; flex-shrink:0; stroke:currentColor; }
-        #efp-detail-btn svg { fill:none; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
-        #efp-filesta-download, #efp-download-all, #efp-downloads button { cursor:pointer; font:inherit; border:1px solid #65508e; border-radius:6px; padding:7px 10px; color:#eee; background:#35234f; }
-        #efp-filesta-download { display:block; width:100%; margin-top:8px; font-size:15px; padding:10px 16px; }
+        #efp-detail-actions > button svg { width:18px; height:18px; flex:0 0 18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+        #efp-download-all, #efp-downloads button { cursor:pointer; font:inherit; border:1px solid #65508e; border-radius:6px; padding:7px 10px; color:#eee; background:#35234f; }
+        #efp-filesta-download { margin-top:8px; color:#eee; background:#35234f; border-color:#65508e; }
         #efp-download-all { display:block; margin:8px 12px; width:calc(100% - 24px); }
         #efp-download-all:disabled { opacity:.45; cursor:default; }
         #efp-downloads { border-top:1px solid #373044; padding:12px; color:#ddd; font-size:12px; }
@@ -1211,7 +1211,10 @@
             });
             actions.append(pick);
             const download = document.createElement('button');
-            download.type = 'button'; download.id = 'efp-filesta-download'; download.textContent = UI.download;
+            download.type = 'button'; download.id = 'efp-filesta-download';
+            download.innerHTML = ICON_DOWNLOAD + '<span></span>';
+            download.querySelector('span').textContent = UI.download;
+            download.title = UI.download; download.setAttribute('aria-label', UI.download);
             download.addEventListener('click', event => {
                 event.preventDefault(); event.stopPropagation();
                 void startWebDownloads([[pick.dataset.url, pick.dataset.title]]);
@@ -1264,5 +1267,5 @@
     if (window.onurlchange === null) window.addEventListener('urlchange', scheduleScan);
     setInterval(() => { void pollWebDownloads(); }, 2000);
     document.addEventListener('visibilitychange',()=>{if(document.hidden)document.querySelectorAll('#efp-list .efp-list-item').forEach(row=>row.dispatchEvent(new Event('mouseleave')));});
-    console.log('[EFP] Envato Footage Picker 1.0.76 loaded · ' + UI_LANG);
+    console.log('[EFP] Envato Footage Picker 1.0.77 loaded · ' + UI_LANG);
 })();
