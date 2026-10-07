@@ -18,6 +18,17 @@ test('adaptive grid reserves 2x2 through 4x3 cells', () => {
     assert.equal(h.gridShape(n).rows, rows);
   }
 });
+
+test('groups keep legacy assignments, ungrouped items and distinct identical names without duplicating footage', () => {
+  const h=helpers(), entries=[['a','A'],['b','B'],['c','C'],['d','D']];
+  const groups=h.collectionGroups(entries,{folders:[{id:'f1',name:'Same'},{id:'f2',name:'Same'},{id:'f3',name:'Empty'}],assignments:{a:'f2',b:'f1',d:'deleted'}});
+  assert.deepEqual(Array.from(groups,g=>g.id),[null,'f1','f2','f3']);
+  assert.deepEqual(Array.from(groups[0].entries,e=>e[0]),['c','d']);
+  assert.equal(groups[1].entries[0][0],'b');
+  assert.equal(groups[2].entries[0][0],'a');
+  assert.equal(groups[3].entries.length,0);
+  assert.equal(new Set(groups.flatMap(g=>g.entries.map(e=>e[0]))).size,4);
+});
 test('legacy collection gains folders without losing items; dangling assignments removed', () => {
   const h = helpers();
   const p = {'https://elements.envato.com/a-ABCDE12':'A'};

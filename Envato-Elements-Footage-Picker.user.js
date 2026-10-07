@@ -4,7 +4,7 @@
 // @namespace    https://elements.envato.com/
 // @description  Collect Envato Elements footage, organize folders and download through Filesta
 // @description:ru Отмечайте футажи на Envato Elements, создавайте папки и скачивайте через Filesta
-// @version      1.0.77
+// @version      1.0.78
 // @homepageURL  https://github.com/S-motion/envato-picker
 // @updateURL    https://raw.githubusercontent.com/S-motion/envato-picker/main/Envato-Elements-Footage-Picker.user.js
 // @downloadURL  https://raw.githubusercontent.com/S-motion/envato-picker/main/Envato-Elements-Footage-Picker.user.js
@@ -67,16 +67,16 @@
         storageError: 'Не удалось сохранить состояние загрузок.',
         emptyQueue: 'Файлы ещё не добавлены в очередь',
         blocked: 'Требуется внимание',
-        allFolders: 'Все футажи', noFolder: 'Без папки', folder: 'Папка',
-        newFolder: 'Создать папку из выбранных', folderName: 'Название папки',
+        allFolders: 'Все футажи', noFolder: 'Без группы', folder: 'Группа',
+        newFolder: 'Создать группу из выбранных', folderName: 'Название группы', emptyGroup: 'В группе пока нет футажей',
         create: 'Создать', cancel: 'Отмена', move: 'Перенести в…',
-        select: 'Выбрать для групповых действий', selectAll: 'Выбрать все показанные',
+        select: 'Выбрать для групповых действий', selectAll: 'Выбрать все футажи',
         selected: 'Выбрано', search: 'Поиск по названию или ссылке',
         sort: 'Порядок футажей', added: 'По добавлению', az: 'По названию А–Я', za: 'По названию Я–А',
         exportHTML: 'Экспорт HTML', exportJSON: 'Резервная копия JSON', importJSON: 'Импорт JSON',
         importError: 'Не удалось прочитать резервную копию. Нужен JSON Envato Picker версии 1 размером до 10 МБ.',
         imported: 'Подборка импортирована', undo: 'Отменить изменение', changed: 'Подборка изменена',
-        removeSelected: 'Удалить выбранные', downloadSelected: 'Скачать выбранные', downloadVisible: 'Скачать показанные',
+        removeSelected: 'Удалить выбранные', downloadSelected: 'Скачать выбранные', downloadVisible: 'Скачать всю подборку',
         nothingFound: 'Ничего не найдено', saveError: 'Не удалось сохранить подборку. Повторите изменение.',
         previewHint: 'Наведите курсор для просмотра видео',
         more: 'Дополнительные действия', shortTitle: 'Подборка', searchShort: 'Найти футаж…',
@@ -101,14 +101,14 @@
         workerTimeout: 'Filesta did not provide a link. Check the result in the background tab before trying again.',
         downloadError: 'Download did not finish. Check download permissions and allowed file extensions in Tampermonkey.',
         storageError: 'Could not save download progress.', emptyQueue: 'No files queued yet', blocked: 'Needs attention',
-        allFolders: 'All footage', noFolder: 'No folder', folder: 'Folder',
-        newFolder: 'Create folder from selection', folderName: 'Folder name', create: 'Create', cancel: 'Cancel', move: 'Move to…',
-        select: 'Select for group actions', selectAll: 'Select all shown', selected: 'Selected', search: 'Search by title or link',
+        allFolders: 'All footage', noFolder: 'No group', folder: 'Group',
+        newFolder: 'Create group from selection', folderName: 'Group name', emptyGroup: 'No footage in this group yet', create: 'Create', cancel: 'Cancel', move: 'Move to…',
+        select: 'Select for group actions', selectAll: 'Select all footage', selected: 'Selected', search: 'Search by title or link',
         sort: 'Footage order', added: 'Date added', az: 'Title A–Z', za: 'Title Z–A',
         exportHTML: 'Export HTML', exportJSON: 'JSON backup', importJSON: 'Import JSON',
         importError: 'Could not read the backup. Use an Envato Picker version 1 JSON file up to 10 MB.',
         imported: 'Collection imported', undo: 'Undo change', changed: 'Collection changed',
-        removeSelected: 'Remove selected', downloadSelected: 'Download selected', downloadVisible: 'Download shown',
+        removeSelected: 'Remove selected', downloadSelected: 'Download selected', downloadVisible: 'Download collection',
         nothingFound: 'Nothing found', saveError: 'Could not save the collection. Try the change again.',
         previewHint: 'Hover to preview video', more: 'More actions', shortTitle: 'Collection', searchShort: 'Find footage…',
         hideDownloads: 'Hide download queue', fullscreen: 'Expand to full screen', exitFullscreen: 'Return to compact window',
@@ -158,6 +158,12 @@
     // WEB_HELPERS_END
 
     // COLLECTION_HELPERS_START
+    function collectionGroups(entries, state) {
+        const groups = [{ id:null, name:'', entries:[] }, ...state.folders.map(f => ({ ...f, entries:[] }))];
+        const byId = new Map(groups.slice(1).map(group => [group.id, group]));
+        for (const entry of entries) (byId.get(state.assignments[entry[0]]) || groups[0]).entries.push(entry);
+        return groups;
+    }
     function gridShape(count) {
         return { columns: count <= 4 ? 2 : count <= 9 ? 3 : 4, rows: count <= 6 ? 2 : 3 };
     }
@@ -400,14 +406,16 @@
 
     const FOLDERS_KEY = 'envato_picker_folders';
     let folderState = normalizeFolders(await GM.getValue(FOLDERS_KEY, null), picked);
-    let activeFolder = 'all', sortOrder = 'added';
+    let sortOrder = 'added';
+    const COLLAPSED_GROUPS_KEY = 'envato_picker_collapsed_groups';
+    const storedCollapsedGroups = await GM.getValue(COLLAPSED_GROUPS_KEY, []);
+    const collapsedGroups = new Set((Array.isArray(storedCollapsedGroups) ? storedCollapsedGroups : []).filter(id => folderState.folders.some(f => f.id === id)));
     const selectedUrls = new Set();
     let undoState = null, renderSignature = '', collectionNotice = '';
     const previewFailures = new Map();
 
     function visibleEntries() {
-        const entries = Object.entries(picked).filter(([url, title]) =>
-            activeFolder === 'all' || (activeFolder === 'none' ? !folderState.assignments[url] : folderState.assignments[url] === activeFolder));
+        const entries = Object.entries(picked);
         if (sortOrder !== 'added') entries.sort((a,b) => a[1].localeCompare(b[1], UI_LANG, { numeric:true }) * (sortOrder === 'za' ? -1 : 1));
         return entries;
     }
@@ -420,12 +428,13 @@
         collectionNotice = UI.changed;
     }
     function saveCollection() {
-        const snapshot = structuredClone({ picked, thumbnails, videos, folderState });
+        const snapshot = structuredClone({ picked, thumbnails, videos, folderState, collapsedGroups:[...collapsedGroups] });
         saveQueue = saveQueue.catch(() => {}).then(async () => {
             await GM.setValue(STORAGE_KEY, snapshot.picked);
             await GM.setValue(THUMBNAILS_KEY, snapshot.thumbnails);
             await GM.setValue(VIDEOS_KEY, snapshot.videos);
             await GM.setValue(FOLDERS_KEY, snapshot.folderState);
+            await GM.setValue(COLLAPSED_GROUPS_KEY, snapshot.collapsedGroups);
         });
         saveQueue.catch(error => { collectionNotice = UI.saveError; renderCollectionTools(); console.error('[EFP] Save failed:', error); });
         return saveQueue;
@@ -609,7 +618,6 @@
         #efp-tools button:disabled { opacity:.4; cursor:default; }
         #efp-tools [hidden], #efp-notice[hidden] { display:none; }
         #efp-search { width:100%; box-sizing:border-box; }
-        #efp-folder { max-width:100%; }
         #efp-selection-count { font-size:11px; color:#c4b5fd; }
         .efp-item-select { accent-color:#9c6aff; width:17px; height:17px; flex-shrink:0; cursor:pointer; }
         .efp-grid .efp-item-select { position:absolute; top:7px; left:7px; z-index:2; margin:0; }
@@ -631,7 +639,6 @@
         #efp-tools { padding:8px 12px; gap:7px; }
         #efp-tools select, #efp-tools input:not([type=checkbox]) { border-color:transparent; background:#ffffff06; border-radius:7px; }
         #efp-tools select:hover, #efp-tools input:focus { border-color:#ffffff20; }
-        #efp-tools #efp-folder { font-weight:500; }
         #efp-all-label { display:flex; align-items:center; justify-content:center; width:24px; flex:0 0 24px; cursor:pointer; }
         #efp-select-all { width:15px; height:15px; accent-color:#9c6aff; cursor:pointer; }
         .efp-searchbox { display:flex; align-items:center; gap:6px; padding-left:6px; color:#777185; }
@@ -661,6 +668,23 @@
         #efp-panel.efp-fullscreen #efp-list { flex:1; max-height:none; }
         #efp-panel.efp-fullscreen #efp-list.efp-grid { height:auto; grid-template-columns:repeat(auto-fill,minmax(min(220px,100%),1fr)); grid-auto-rows:auto; }
         #efp-panel.efp-fullscreen .efp-list-item { min-height:0; }
+        #efp-list.efp-grid { display:block; }
+        .efp-group { margin:0 0 8px; border:1px solid #ffffff0c; border-radius:9px; overflow:hidden; }
+        .efp-group-title { display:flex; align-items:center; gap:8px; padding:10px 12px; cursor:pointer; list-style:none; color:#e4ddef; font-size:12px; font-weight:600; background:#ffffff05; }
+        .efp-group-title::-webkit-details-marker { display:none; }
+        .efp-group-title:hover { background:#ffffff0a; }
+        .efp-group-title > svg { width:14px; height:14px; flex:0 0 14px; color:#ae94dc; }
+        .efp-group[open] > .efp-group-title > svg { transform:rotate(90deg); }
+        .efp-group-name { flex:1; min-width:0; overflow-wrap:anywhere; }
+        .efp-group-count { padding:2px 6px; border-radius:6px; color:#b6a8c9; background:#ffffff08; font:inherit; }
+        .efp-group-empty,.efp-ungrouped-title { padding:9px 12px; color:#8f859e; font-size:11px; }
+        .efp-group-items { padding:3px 0; }
+        .efp-grid .efp-group-items { display:grid; grid-template-columns:repeat(var(--efp-cols),minmax(0,1fr)); grid-auto-rows:var(--efp-cell); gap:8px; padding:8px; }
+        .efp-grid > .efp-group-items { padding:0 0 8px; }
+        .efp-grid .efp-group-empty { grid-column:1 / -1; }
+        .efp-group:not([open]) > .efp-group-items { display:none; }
+        #efp-panel.efp-fullscreen .efp-grid .efp-group-items { grid-template-columns:repeat(auto-fill,minmax(min(220px,100%),1fr)); grid-auto-rows:auto; }
+        #efp-new-folder { margin-left:auto !important; }
         #efp-fullscreen-btn[aria-pressed=true] { background:#ffffff12; color:white; }
         @media(max-width:400px) { .efp-drawer-title { font-size:11px; } .efp-header-actions { gap:0; } #efp-drawer-header { padding:8px; } }
     `);
@@ -678,16 +702,16 @@
     }
 
     function renderCollectionTools() {
-        const folder = document.getElementById('efp-folder');
-        if (!folder) return;
-        const options = [['all', UI.allFolders], ['none', UI.noFolder], ...folderState.folders.map(f => [f.id, '📁 ' + f.name])];
-        if (folder.dataset.options !== JSON.stringify(options)) {
-            folder.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
-            folder.dataset.options = JSON.stringify(options);
-            const move = document.getElementById('efp-move');
+        const create = document.getElementById('efp-new-folder');
+        if (!create) return;
+        create.disabled = !selectedUrls.size;
+        const options = folderState.folders.map(f => [f.id, f.name]);
+        const move = document.getElementById('efp-move');
+        if (move.dataset.options !== JSON.stringify(options)) {
             move.replaceChildren(new Option(UI.move, ''), new Option(UI.noFolder, 'none'), ...folderState.folders.map(f => new Option(f.name, f.id)));
+            move.dataset.options = JSON.stringify(options);
         }
-        folder.value = activeFolder;
+        if (!selectedUrls.size) document.getElementById('efp-folder-form').hidden=true;
         document.getElementById('efp-selection-count').textContent = UI.selected + ': ' + selectedUrls.size;
         document.getElementById('efp-selection').hidden = !selectedUrls.size;
         document.getElementById('efp-move').disabled = !selectedUrls.size;
@@ -715,17 +739,16 @@
         const row = () => { const el = document.createElement('div'); el.className = 'efp-tool-row'; tools.append(el); return el; };
         const button = (id, text, fn, svg) => { const el = document.createElement('button'); el.type='button'; el.id=id; el.title=text; el.setAttribute('aria-label',text); if(svg){el.innerHTML=svg;el.className='efp-icon-btn';}else el.textContent=text; el.addEventListener('click', fn); return el; };
         const top = row();
-        const folder = document.createElement('select'); folder.id='efp-folder'; folder.setAttribute('aria-label',UI.folder);
-        folder.addEventListener('change', () => { activeFolder=folder.value; selectedUrls.clear(); renderList(); });
-        top.append(folder, button('efp-new-folder',UI.newFolder, () => { form.hidden = !form.hidden; if (!form.hidden) name.focus(); },ICON_FOLDER_PLUS));
+        top.append(button('efp-new-folder',UI.newFolder, () => { if(!selectedUrls.size)return; form.hidden = !form.hidden; if (!form.hidden) name.focus(); },ICON_FOLDER_PLUS));
         const form = row(); form.id='efp-folder-form'; form.hidden=true;
         const name = document.createElement('input'); name.id='efp-folder-name'; name.placeholder=UI.folderName; name.maxLength=80; name.setAttribute('aria-label',UI.folderName);
         const createFolder = () => {
+            if (!selectedUrls.size) return;
             const value = name.value.trim(); if (!value) { name.focus(); return; }
             rememberUndo();
             const id = crypto.randomUUID(); folderState.folders.push({id,name:value});
             selectedUrls.forEach(url => { folderState.assignments[url]=id; });
-            activeFolder=id; selectedUrls.clear(); name.value=''; form.hidden=true; finishCollectionChange();
+            collapsedGroups.delete(id); selectedUrls.clear(); name.value=''; form.hidden=true; finishCollectionChange();
         };
         name.addEventListener('keydown', e => { if (e.key === 'Enter') createFolder(); if(e.key==='Escape') form.hidden=true; });
         form.append(name,button('efp-create-folder',UI.create,createFolder,ICON_COPY_OK),button('efp-cancel-folder',UI.cancel,()=>{form.hidden=true;},ICON_REMOVE));
@@ -744,6 +767,7 @@
         move.addEventListener('change',()=>{
             if(!move.value || !selectedUrls.size) return;
             rememberUndo(); selectedUrls.forEach(url=>{ if(move.value==='none') delete folderState.assignments[url]; else folderState.assignments[url]=move.value; });
+            collapsedGroups.delete(move.value);
             move.value=''; selectedUrls.clear(); finishCollectionChange();
         });
         selection.append(count,move,button('efp-remove-selected',UI.removeSelected,()=>{
@@ -751,8 +775,7 @@
         },ICON_TRASH));
         const exports=advanced;
         tools.append(button('efp-export-html',UI.exportHTML,()=>{
-            const title=folderState.folders.find(f=>f.id===activeFolder)?.name || (activeFolder==='none'?UI.noFolder:UI.picked);
-            downloadText(collectionHTML(title,actionEntries(),thumbnails),'envato-collection.html','text/html;charset=utf-8');
+            downloadText(collectionHTML(UI.picked,actionEntries(),thumbnails),'envato-collection.html','text/html;charset=utf-8');
         },ICON_HTML));
         exports.append(button('efp-export-json',UI.exportJSON,()=>{
             downloadText(JSON.stringify({version:1,picked,thumbnails:Object.fromEntries(Object.keys(picked).filter(u=>thumbnails[u]).map(u=>[u,thumbnails[u]])),videos:Object.fromEntries(Object.keys(picked).filter(u=>videos[u]).map(u=>[u,videos[u]])),...folderState},null,2),'envato-backup.json','application/json');
@@ -763,7 +786,7 @@
                 const f=file.files[0]; if(!f) return; if(f.size>10*1024*1024) throw new Error('Too large');
                 const data=parseBackup(await f.text()); rememberUndo();
                 ({picked,thumbnails,videos,folderState}=mergeBackup({picked,thumbnails,videos,folderState},data,()=>crypto.randomUUID()));
-                activeFolder='all'; selectedUrls.clear(); collectionNotice=UI.imported; finishCollectionChange();
+                selectedUrls.clear(); collectionNotice=UI.imported; finishCollectionChange();
             } catch { collectionNotice=UI.importError; renderCollectionTools(); }
             finally { file.value=''; }
         });
@@ -781,7 +804,7 @@
         badge.textContent = String(Object.keys(picked).length);
         badge.classList.toggle('efp-empty', !Object.keys(picked).length);
         renderCollectionTools();
-        const signature = JSON.stringify([entries, entries.map(([url]) => thumbnails[url]), viewMode, Boolean(Object.keys(picked).length)]);
+        const signature = JSON.stringify([entries, entries.map(([url]) => thumbnails[url]), viewMode, folderState]);
         if (signature === renderSignature) return;
         renderSignature = signature;
         const downloadAll = document.getElementById('efp-download-all');
@@ -803,7 +826,7 @@
             view.setAttribute('aria-pressed', String(viewMode === 'grid'));
         }
         list.replaceChildren();
-        if (!entries.length) {
+        if (!entries.length && !folderState.folders.length) {
             const empty = document.createElement('div');
             empty.id = 'efp-empty-msg';
             empty.textContent = Object.keys(picked).length ? UI.nothingFound : UI.empty;
@@ -811,7 +834,30 @@
             return;
         }
         const fragment = document.createDocumentFragment();
-        for (const [url, title] of entries) {
+        for (const group of collectionGroups(entries, folderState)) {
+            if (!group.id && !group.entries.length) continue;
+            const content = document.createElement('div'); content.className='efp-group-items';
+            if (group.id) {
+                const disclosure = document.createElement('details'); disclosure.className='efp-group'; disclosure.dataset.groupId=group.id;
+                disclosure.open = !collapsedGroups.has(group.id);
+                const summary = document.createElement('summary'); summary.className='efp-group-title';
+                summary.innerHTML = icon('<path d="m9 5 7 7-7 7"/>');
+                const label = document.createElement('span'); label.className='efp-group-name'; label.textContent=group.name;
+                const count = document.createElement('small'); count.className='efp-group-count'; count.textContent=String(group.entries.length);
+                summary.append(label,count); disclosure.append(summary,content); fragment.append(disclosure);
+                disclosure.addEventListener('toggle',()=>{
+                    if(!disclosure.isConnected) return;
+                    if (!disclosure.open) content.querySelectorAll('.efp-list-item').forEach(row=>row.dispatchEvent(new Event('mouseleave')));
+                    if(collapsedGroups.has(group.id) === !disclosure.open) return;
+                    if(disclosure.open)collapsedGroups.delete(group.id);else collapsedGroups.add(group.id);
+                    void saveCollection();
+                });
+                if (!group.entries.length) { const empty=document.createElement('div'); empty.className='efp-group-empty';empty.textContent=UI.emptyGroup;content.append(empty); }
+            } else {
+                if(folderState.folders.length) { const label=document.createElement('div');label.className='efp-ungrouped-title';label.textContent=UI.noFolder;fragment.append(label); }
+                fragment.append(content);
+            }
+        for (const [url, title] of group.entries) {
             const row = document.createElement('div');
             row.className = 'efp-list-item';
             row.classList.toggle('efp-selected',selectedUrls.has(url));
@@ -857,7 +903,8 @@
             remove.innerHTML = ICON_REMOVE;
             remove.addEventListener('click', () => { void setPicked(url, title, false); });
             row.append(checkbox, link, filesta, remove);
-            fragment.append(row);
+            content.append(row);
+        }
         }
         list.append(fragment);
     }
@@ -888,7 +935,6 @@
             const exists = Object.hasOwn(picked,url);
             if(!exists) { undoState=null; collectionNotice=''; }
             picked[url] = title || url;
-            if(!exists && folderState.folders.some(f=>f.id===activeFolder)) folderState.assignments[url]=activeFolder;
         }
         else { rememberUndo(); delete picked[url]; delete folderState.assignments[url]; selectedUrls.delete(url); }
         renderList();
@@ -966,7 +1012,7 @@
         const notice=document.createElement('div'); notice.id='efp-notice'; notice.hidden=true;
         const noticeText=document.createElement('span'); noticeText.id='efp-notice-text'; noticeText.setAttribute('role','status');
         const undo=makeButton('efp-undo',UI.undo,ICON_UNDO);
-        undo.addEventListener('click',()=>{ if(!undoState)return; picked=undoState.picked;folderState=undoState.folderState;undoState=null;collectionNotice='';selectedUrls.clear();if(!folderState.folders.some(f=>f.id===activeFolder))activeFolder='all';finishCollectionChange(); });
+        undo.addEventListener('click',()=>{ if(!undoState)return; picked=undoState.picked;folderState=undoState.folderState;undoState=null;collectionNotice='';selectedUrls.clear();finishCollectionChange(); });
         notice.append(noticeText,undo);
         const collectionTools=buildCollectionTools();
         const more=makeButton('efp-more-btn',UI.more,ICON_MORE); more.setAttribute('aria-expanded','false');more.setAttribute('aria-controls','efp-more-actions');
@@ -1267,5 +1313,5 @@
     if (window.onurlchange === null) window.addEventListener('urlchange', scheduleScan);
     setInterval(() => { void pollWebDownloads(); }, 2000);
     document.addEventListener('visibilitychange',()=>{if(document.hidden)document.querySelectorAll('#efp-list .efp-list-item').forEach(row=>row.dispatchEvent(new Event('mouseleave')));});
-    console.log('[EFP] Envato Footage Picker 1.0.77 loaded · ' + UI_LANG);
+    console.log('[EFP] Envato Footage Picker 1.0.78 loaded · ' + UI_LANG);
 })();
